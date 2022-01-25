@@ -16,6 +16,7 @@ type Job struct {
 	Args       map[string]interface{} `json:"args"`
 	Unique     bool                   `json:"unique,omitempty"`
 	UniqueKey  string                 `json:"unique_key,omitempty"`
+	PoolID     string                 `json:"pool_id"`
 
 	// Inputs when retrying
 	Fails    int64  `json:"fails,omitempty"` // number of times this job has failed
@@ -27,6 +28,8 @@ type Job struct {
 	inProgQueue  []byte
 	argError     error
 	observer     *observer
+	aliveChecker func(*Job) bool
+	killed       bool
 }
 
 // Q is a shortcut to easily specify arguments for jobs when enqueueing them.
@@ -68,6 +71,19 @@ func (j *Job) Checkin(msg string) {
 	if j.observer != nil {
 		j.observer.observeCheckin(j.Name, j.ID, msg)
 	}
+}
+
+// Alive returns whether the job has been flagged to be stopped. See Client.KillJob
+func (j *Job) Alive() bool {
+	if j.killed {
+		return false
+	}
+
+	if j.aliveChecker != nil {
+		j.killed = !j.aliveChecker(j)
+	}
+
+	return !j.killed
 }
 
 // ArgString returns j.Args[key] typed to a string. If the key is missing or of the wrong type, it sets an argument error
