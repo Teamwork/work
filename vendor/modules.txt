@@ -43,9 +43,8 @@ github.com/gocraft/web
 # github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 ## explicit
 github.com/golang/glog
-# github.com/gomodule/redigo v2.0.0+incompatible
-## explicit
-github.com/gomodule/redigo/internal
+# github.com/gomodule/redigo v1.8.8
+## explicit; go 1.16
 github.com/gomodule/redigo/redis
 # github.com/jrallison/go-workers v0.0.0-20180112190529-dbf81d0b75bb
 ## explicit
@@ -58,7 +57,7 @@ github.com/pmezard/go-difflib/difflib
 # github.com/robfig/cron/v3 v3.0.1
 ## explicit; go 1.12
 github.com/robfig/cron/v3
-# github.com/stretchr/testify v1.5.1
+# github.com/stretchr/testify v1.7.0
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 # github.com/youtube/vitess v2.1.1+incompatible
@@ -72,4 +71,6 @@ github.com/youtube/vitess/go/sync2
 golang.org/x/net/context
 # gopkg.in/yaml.v2 v2.2.2
 ## explicit
-gopkg.in/yaml.v2
+# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+## explicit
+gopkg.in/yaml.v3
