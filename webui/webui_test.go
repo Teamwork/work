@@ -11,7 +11,7 @@ import (
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
-	"github.com/teamwork/work"
+	work "github.com/teamwork/work/v2"
 )
 
 func TestWebUIStartStop(t *testing.T) {

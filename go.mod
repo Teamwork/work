@@ -1,4 +1,4 @@
-module github.com/teamwork/work
+module github.com/teamwork/work/v2
 
 go 1.18
 
@@ -28,6 +28,5 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	gopkg.in/yaml.v2 v2.2.2 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
