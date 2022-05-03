@@ -10,8 +10,8 @@ import (
 	"github.com/braintree/manners"
 	"github.com/gocraft/web"
 	"github.com/gomodule/redigo/redis"
-	"github.com/teamwork/work"
-	"github.com/teamwork/work/webui/internal/assets"
+	work "github.com/teamwork/work/v2"
+	"github.com/teamwork/work/v2/webui/internal/assets"
 )
 
 // Server implements an HTTP server which exposes a JSON API to view and manage gocraft/work items.

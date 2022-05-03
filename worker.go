@@ -266,7 +266,7 @@ func (w *worker) getAndDeleteUniqueJob(job *Job) *Job {
 	return jobWithArgs
 }
 
-func (w *worker) alive(job *Job) bool {
+func (w *worker) alive(job *Job) (bool, error) {
 	conn := w.pool.Get()
 	defer conn.Close()
 
@@ -274,19 +274,22 @@ func (w *worker) alive(job *Job) bool {
 
 	_, err := redis.Int(conn.Do("GET", key))
 	if err != nil {
-		if err != redis.ErrNil {
-			logError("worker.jobalive.get", err)
+		// If there isn't a key, then we don't need to report the error
+		if err == redis.ErrNil {
+			return true, nil
 		}
 
-		return true
+		return false, err
 	}
 
 	_, err = conn.Do("DEL", key)
 	if err != nil {
+		// This error isn't critical to the alive status, so just log it rather
+		// than return the error, which kills the handler
 		logError("worker.jobalive.del", err)
 	}
 
-	return false
+	return false, nil
 }
 
 func (w *worker) removeJobFromInProgress(job *Job, fate terminateOp) {

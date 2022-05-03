@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gomodule/redigo/redis"
-	"github.com/teamwork/work/webui"
+	"github.com/teamwork/work/v2/webui"
 )
 
 var (
