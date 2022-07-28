@@ -217,6 +217,10 @@ func (c *Client) Queues() ([]*Queue, error) {
 	key := redisKeyKnownJobs(c.namespace)
 	jobNames, err := redis.Strings(conn.Do("SMEMBERS", key))
 	if err != nil {
+		// check if there are no queues
+		if err == redis.ErrNil {
+			return nil, nil
+		}
 		return nil, err
 	}
 	sort.Strings(jobNames)
@@ -264,6 +268,13 @@ func (c *Client) Queues() ([]*Queue, error) {
 		if s.Count > 0 {
 			b, err := redis.Bytes(conn.Receive())
 			if err != nil {
+				// maybe the list items were already consumed between the LLEN and
+				// LINDEX calls, so if we don't get any items here, update the count and
+				// move on
+				if err == redis.ErrNil {
+					s.Count = 0
+					continue
+				}
 				logError("client.queues.receive2", err)
 				return nil, err
 			}
