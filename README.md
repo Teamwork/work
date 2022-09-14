@@ -251,10 +251,10 @@ go install github.com/teamwork/work/cmd/workwebui
 
 Then, you can run it:
 ```bash
-workwebui -redis="redis:6379" -ns="work" -listen=":5040"
+workwebui -redis="redis:6379" -listen=":5040"
 ```
 
-Navigate to ```http://localhost:5040/```.
+Navigate to ```http://localhost:5040/ns/```.
 
 You'll see a view that looks like this:
 

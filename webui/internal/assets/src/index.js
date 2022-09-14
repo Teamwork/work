@@ -15,6 +15,10 @@ class App extends React.Component {
     children: PropTypes.element.isRequired,
   }
 
+  static apiURL(endpoint) {
+    return location.pathname.slice(0, -1) + endpoint;
+  }
+
   render() {
     return (
       <div className={styles.container} style={{marginTop: 30, marginBottom: 60}}>
@@ -46,17 +50,17 @@ class App extends React.Component {
 render(
   <Router history={hashHistory}>
     <Route path="/" component={App}>
-      <Route path="/processes" component={ () => <Processes busyWorkerURL="/busy_workers" workerPoolURL="/worker_pools" /> } />
-      <Route path="/queues" component={ () => <Queues url="/queues" /> } />
-      <Route path="/retry_jobs" component={ () => <RetryJobs url="/retry_jobs" /> } />
-      <Route path="/scheduled_jobs" component={ () => <ScheduledJobs url="/scheduled_jobs" /> } />
+      <Route path="/processes" component={ () => <Processes busyWorkerURL={App.apiURL("/busy_workers")} workerPoolURL={App.apiURL("/worker_pools")} /> } />
+      <Route path="/queues" component={ () => <Queues url={App.apiURL("/queues")} /> } />
+      <Route path="/retry_jobs" component={ () => <RetryJobs url={App.apiURL("/retry_jobs")} /> } />
+      <Route path="/scheduled_jobs" component={ () => <ScheduledJobs url={App.apiURL("/scheduled_jobs")} /> } />
       <Route path="/dead_jobs" component={ () =>
         <DeadJobs
-          fetchURL="/dead_jobs"
-          retryURL="/retry_dead_job"
-          retryAllURL="/retry_all_dead_jobs"
-          deleteURL="/delete_dead_job"
-          deleteAllURL="/delete_all_dead_jobs"
+          fetchURL={App.apiURL("/dead_jobs")}
+          retryURL={App.apiURL("/retry_dead_job")}
+          retryAllURL={App.apiURL("/retry_all_dead_jobs")}
+          deleteURL={App.apiURL("/delete_dead_job")}
+          deleteAllURL={App.apiURL("/delete_all_dead_jobs")}
         />
       } />
       <IndexRedirect from="" to="/processes" />
