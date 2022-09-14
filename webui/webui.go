@@ -16,29 +16,25 @@ import (
 
 // Server implements an HTTP server which exposes a JSON API to view and manage gocraft/work items.
 type Server struct {
-	namespace string
-	pool      *redis.Pool
-	client    *work.Client
-	hostPort  string
-	server    *manners.GracefulServer
-	wg        sync.WaitGroup
-	router    *web.Router
+	pool     *redis.Pool
+	hostPort string
+	server   *manners.GracefulServer
+	wg       sync.WaitGroup
+	router   *web.Router
 }
 
 type context struct {
 	*Server
 }
 
-// NewServer creates and returns a new server. The 'namespace' param is the redis namespace to use. The hostPort param is the address to bind on to expose the API.
-func NewServer(namespace string, pool *redis.Pool, hostPort string) *Server {
+// NewServer creates and returns a new server. The hostPort param is the address to bind on to expose the API.
+func NewServer(pool *redis.Pool, hostPort string) *Server {
 	router := web.New(context{})
 	server := &Server{
-		namespace: namespace,
-		pool:      pool,
-		client:    work.NewClient(namespace, pool),
-		hostPort:  hostPort,
-		server:    manners.NewWithServer(&http.Server{Addr: hostPort, Handler: router}),
-		router:    router,
+		pool:     pool,
+		hostPort: hostPort,
+		server:   manners.NewWithServer(&http.Server{Addr: hostPort, Handler: router}),
+		router:   router,
 	}
 
 	router.Middleware(func(c *context, rw web.ResponseWriter, r *web.Request, next web.NextMiddlewareFunc) {
@@ -49,28 +45,46 @@ func NewServer(namespace string, pool *redis.Pool, hostPort string) *Server {
 		rw.Header().Set("Content-Type", "application/json; charset=utf-8")
 		next(rw, r)
 	})
-	router.Get("/queues", (*context).queues)
-	router.Get("/worker_pools", (*context).workerPools)
-	router.Get("/busy_workers", (*context).busyWorkers)
-	router.Get("/retry_jobs", (*context).retryJobs)
-	router.Get("/scheduled_jobs", (*context).scheduledJobs)
-	router.Get("/dead_jobs", (*context).deadJobs)
-	router.Post("/delete_dead_job/:died_at:\\d.*/:job_id", (*context).deleteDeadJob)
-	router.Post("/retry_dead_job/:died_at:\\d.*/:job_id", (*context).retryDeadJob)
-	router.Post("/delete_all_dead_jobs", (*context).deleteAllDeadJobs)
-	router.Post("/retry_all_dead_jobs", (*context).retryAllDeadJobs)
+	router.Get("/:namespace/queues", (*context).queues)
+	router.Get("/:namespace/worker_pools", (*context).workerPools)
+	router.Get("/:namespace/busy_workers", (*context).busyWorkers)
+	router.Get("/:namespace/retry_jobs", (*context).retryJobs)
+	router.Get("/:namespace/scheduled_jobs", (*context).scheduledJobs)
+	router.Get("/:namespace/dead_jobs", (*context).deadJobs)
+	router.Post("/:namespace/delete_dead_job/:died_at:\\d.*/:job_id", (*context).deleteDeadJob)
+	router.Post("/:namespace/retry_dead_job/:died_at:\\d.*/:job_id", (*context).retryDeadJob)
+	router.Post("/:namespace/delete_all_dead_jobs", (*context).deleteAllDeadJobs)
+	router.Post("/:namespace/retry_all_dead_jobs", (*context).retryAllDeadJobs)
+
+	router.Get("/", func(c *context, rw web.ResponseWriter, req *web.Request) {
+		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintln(rw, "<h2>Welcome to workwebui.</h2>")
+		fmt.Fprintln(rw, "<h4>Please provide a namespace in the url.</h4>")
+		fmt.Fprintf(rw, "<h4>Example: <a href='http://localhost%s/ns/'>http://localhost%s/ns/</a></h4>",
+			hostPort, hostPort)
+	})
 
 	//
 	// Build the HTML page:
 	//
 	assetRouter := router.Subrouter(context{}, "")
-	assetRouter.Get("/", func(c *context, rw web.ResponseWriter, req *web.Request) {
+	assetRouter.Get("/:namespace", func(c *context, rw web.ResponseWriter, req *web.Request) {
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-		rw.Write(assets.MustAsset("index.html"))
+		b, err := assets.Asset("index.html")
+		if err != nil {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+		rw.Write(b)
 	})
 	assetRouter.Get("/work.js", func(c *context, rw web.ResponseWriter, req *web.Request) {
 		rw.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		rw.Write(assets.MustAsset("work.js"))
+		b, err := assets.Asset("work.js")
+		if err != nil {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+		rw.Write(b)
 	})
 
 	return server
@@ -92,17 +106,20 @@ func (w *Server) Stop() {
 }
 
 func (c *context) queues(rw web.ResponseWriter, r *web.Request) {
-	response, err := c.client.Queues()
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
+	response, err := nsclient.Queues()
 	render(rw, response, err)
 }
 
 func (c *context) workerPools(rw web.ResponseWriter, r *web.Request) {
-	response, err := c.client.WorkerPoolHeartbeats()
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
+	response, err := nsclient.WorkerPoolHeartbeats()
 	render(rw, response, err)
 }
 
 func (c *context) busyWorkers(rw web.ResponseWriter, r *web.Request) {
-	observations, err := c.client.WorkerObservations()
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
+	observations, err := nsclient.WorkerObservations()
 	if err != nil {
 		renderError(rw, err)
 		return
@@ -119,13 +136,14 @@ func (c *context) busyWorkers(rw web.ResponseWriter, r *web.Request) {
 }
 
 func (c *context) retryJobs(rw web.ResponseWriter, r *web.Request) {
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
 	page, err := parsePage(r)
 	if err != nil {
 		renderError(rw, err)
 		return
 	}
 
-	jobs, count, err := c.client.RetryJobs(page)
+	jobs, count, err := nsclient.RetryJobs(page)
 	if err != nil {
 		renderError(rw, err)
 		return
@@ -140,13 +158,14 @@ func (c *context) retryJobs(rw web.ResponseWriter, r *web.Request) {
 }
 
 func (c *context) scheduledJobs(rw web.ResponseWriter, r *web.Request) {
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
 	page, err := parsePage(r)
 	if err != nil {
 		renderError(rw, err)
 		return
 	}
 
-	jobs, count, err := c.client.ScheduledJobs(page)
+	jobs, count, err := nsclient.ScheduledJobs(page)
 	if err != nil {
 		renderError(rw, err)
 		return
@@ -161,13 +180,14 @@ func (c *context) scheduledJobs(rw web.ResponseWriter, r *web.Request) {
 }
 
 func (c *context) deadJobs(rw web.ResponseWriter, r *web.Request) {
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
 	page, err := parsePage(r)
 	if err != nil {
 		renderError(rw, err)
 		return
 	}
 
-	jobs, count, err := c.client.DeadJobs(page)
+	jobs, count, err := nsclient.DeadJobs(page)
 	if err != nil {
 		renderError(rw, err)
 		return
@@ -182,36 +202,40 @@ func (c *context) deadJobs(rw web.ResponseWriter, r *web.Request) {
 }
 
 func (c *context) deleteDeadJob(rw web.ResponseWriter, r *web.Request) {
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
 	diedAt, err := strconv.ParseInt(r.PathParams["died_at"], 10, 64)
 	if err != nil {
 		renderError(rw, err)
 		return
 	}
 
-	err = c.client.DeleteDeadJob(diedAt, r.PathParams["job_id"])
+	err = nsclient.DeleteDeadJob(diedAt, r.PathParams["job_id"])
 
 	render(rw, map[string]string{"status": "ok"}, err)
 }
 
 func (c *context) retryDeadJob(rw web.ResponseWriter, r *web.Request) {
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
 	diedAt, err := strconv.ParseInt(r.PathParams["died_at"], 10, 64)
 	if err != nil {
 		renderError(rw, err)
 		return
 	}
 
-	err = c.client.RetryDeadJob(diedAt, r.PathParams["job_id"])
+	err = nsclient.RetryDeadJob(diedAt, r.PathParams["job_id"])
 
 	render(rw, map[string]string{"status": "ok"}, err)
 }
 
 func (c *context) deleteAllDeadJobs(rw web.ResponseWriter, r *web.Request) {
-	err := c.client.DeleteAllDeadJobs()
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
+	err := nsclient.DeleteAllDeadJobs()
 	render(rw, map[string]string{"status": "ok"}, err)
 }
 
 func (c *context) retryAllDeadJobs(rw web.ResponseWriter, r *web.Request) {
-	err := c.client.RetryAllDeadJobs()
+	nsclient := work.NewClient(r.PathParams["namespace"], c.pool)
+	err := nsclient.RetryAllDeadJobs()
 	render(rw, map[string]string{"status": "ok"}, err)
 }
 
