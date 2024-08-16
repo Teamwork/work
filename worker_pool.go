@@ -305,6 +305,37 @@ func (wp *WorkerPool) writeConcurrencyControlsToRedis() {
 	}
 }
 
+func (wp *WorkerPool) Alive(job *Job) (bool, error) {
+	if job.Killed {
+		return !job.Killed, nil
+	}
+
+	conn := wp.pool.Get()
+	defer conn.Close()
+
+	key := redisKeyKilledJob(wp.namespace, job.ID)
+
+	_, err := redis.Int(conn.Do("GET", key))
+	if err != nil {
+		// If there isn't a key, then we don't need to report the error
+		if err == redis.ErrNil {
+			return true, nil
+		}
+
+		return false, err
+	}
+
+	_, err = conn.Do("DEL", key)
+	if err != nil {
+		// This error isn't critical to the alive status, so just log it rather
+		// than return the error, which kills the handler
+		logError("worker.jobalive.del", err)
+	}
+	job.Killed = true
+
+	return false, nil
+}
+
 // validateContextType will panic if context is invalid
 func validateContextType(ctxType reflect.Type) {
 	if ctxType.Kind() != reflect.Struct {
@@ -327,11 +358,11 @@ func validateMiddlewareType(ctxType reflect.Type, vfn reflect.Value) {
 // Since it's easy to pass the wrong method as a middleware/handler, and since the user can't rely on static type checking since we use reflection,
 // lets be super helpful about what they did and what they need to do.
 // Arguments:
-//  - vfn is the failed method
-//  - addingType is for "You are adding {addingType} to a worker pool...". Eg, "middleware" or "a handler"
-//  - yourType is for "Your {yourType} function can have...". Eg, "middleware" or "handler" or "error handler"
-//  - args is like "rw web.ResponseWriter, req *web.Request, next web.NextMiddlewareFunc"
-//    - NOTE: args can be calculated if you pass in each type. BUT, it doesn't have example argument name, so it has less copy/paste value.
+//   - vfn is the failed method
+//   - addingType is for "You are adding {addingType} to a worker pool...". Eg, "middleware" or "a handler"
+//   - yourType is for "Your {yourType} function can have...". Eg, "middleware" or "handler" or "error handler"
+//   - args is like "rw web.ResponseWriter, req *web.Request, next web.NextMiddlewareFunc"
+//   - NOTE: args can be calculated if you pass in each type. BUT, it doesn't have example argument name, so it has less copy/paste value.
 func instructiveMessage(vfn reflect.Value, addingType string, yourType string, args string, ctxType reflect.Type) string {
 	// Get context type without package.
 	ctxString := ctxType.String()

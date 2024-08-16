@@ -207,7 +207,6 @@ func (w *worker) processJob(job *Job) {
 	} else {
 		w.observeStarted(job.Name, job.ID, job.Args)
 		job.observer = w.observer // for Checkin
-		job.aliveChecker = w.alive
 		job.PoolID = w.poolID
 		_, runErr = runJob(job, w.contextType, w.middleware, jt)
 		w.observeDone(job.Name, job.ID, runErr)
@@ -264,32 +263,6 @@ func (w *worker) getAndDeleteUniqueJob(job *Job) *Job {
 	}
 
 	return jobWithArgs
-}
-
-func (w *worker) alive(job *Job) (bool, error) {
-	conn := w.pool.Get()
-	defer conn.Close()
-
-	key := redisKeyKilledJob(w.namespace, job.ID)
-
-	_, err := redis.Int(conn.Do("GET", key))
-	if err != nil {
-		// If there isn't a key, then we don't need to report the error
-		if err == redis.ErrNil {
-			return true, nil
-		}
-
-		return false, err
-	}
-
-	_, err = conn.Do("DEL", key)
-	if err != nil {
-		// This error isn't critical to the alive status, so just log it rather
-		// than return the error, which kills the handler
-		logError("worker.jobalive.del", err)
-	}
-
-	return false, nil
 }
 
 func (w *worker) removeJobFromInProgress(job *Job, fate terminateOp) {
