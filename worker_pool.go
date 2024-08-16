@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/robfig/cron/v3"
@@ -306,8 +307,8 @@ func (wp *WorkerPool) writeConcurrencyControlsToRedis() {
 }
 
 func (wp *WorkerPool) Alive(job *Job) (bool, error) {
-	if job.Killed {
-		return !job.Killed, nil
+	if atomic.LoadInt32(&job.killed) == 1 {
+		return false, nil
 	}
 
 	conn := wp.pool.Get()
@@ -331,7 +332,8 @@ func (wp *WorkerPool) Alive(job *Job) (bool, error) {
 		// than return the error, which kills the handler
 		logError("worker.jobalive.del", err)
 	}
-	job.Killed = true
+
+	atomic.StoreInt32(&job.killed, 1)
 
 	return false, nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync/atomic"
 )
 
 // Job represents a job.
@@ -17,7 +18,6 @@ type Job struct {
 	Unique     bool                   `json:"unique,omitempty"`
 	UniqueKey  string                 `json:"unique_key,omitempty"`
 	PoolID     string                 `json:"pool_id"`
-	Killed     bool                   `json:"killed"`
 
 	// Inputs when retrying
 	Fails    int64  `json:"fails,omitempty"` // number of times this job has failed
@@ -29,6 +29,7 @@ type Job struct {
 	inProgQueue  []byte
 	argError     error
 	observer     *observer
+	killed       int32
 }
 
 // Q is a shortcut to easily specify arguments for jobs when enqueueing them.
@@ -70,6 +71,10 @@ func (j *Job) Checkin(msg string) {
 	if j.observer != nil {
 		j.observer.observeCheckin(j.Name, j.ID, msg)
 	}
+}
+
+func (j *Job) Killed() bool {
+	return atomic.LoadInt32(&j.killed) == 1
 }
 
 // ArgString returns j.Args[key] typed to a string. If the key is missing or of the wrong type, it sets an argument error
