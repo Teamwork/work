@@ -311,7 +311,7 @@ func terminateAndDead(w *worker, job *Job) terminateOp {
 func (w *worker) jobFate(jt *jobType, job *Job) terminateOp {
 	if jt != nil {
 		failsRemaining := int64(jt.MaxFails) - job.Fails
-		if failsRemaining > 0 {
+		if failsRemaining > 0 && !job.Killed() {
 			return terminateAndRetry(w, jt, job)
 		}
 		if jt.SkipDead {
