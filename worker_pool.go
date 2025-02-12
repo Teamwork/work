@@ -186,19 +186,19 @@ func JobMetricsMiddleware(wp *WorkerPool) func(*Job, NextMiddlewareFunc) error {
 
 		queueTime := time.Duration(startTime-job.EnqueuedAt) * time.Second
 
-		wp.dd.Histogram("job.queue_time", queueTime, []string{"job:" + job.Name, "jobID:" + job.ID})
+		wp.dd.Histogram("job.queue_time", queueTime, []string{"job:" + job.Name})
 
 		jobStart := time.Now()
 		err := next()
 		executionTime := time.Since(jobStart)
 
-		wp.dd.Histogram("job.execution_time", executionTime, []string{"job:" + job.Name, "jobID:" + job.ID})
+		wp.dd.Histogram("job.execution_time", executionTime, []string{"job:" + job.Name})
 
 		if err != nil {
-			wp.dd.Incr("job.failures", []string{"job:" + job.Name, "jobID:" + job.ID})
+			wp.dd.Incr("job.failures", []string{"job:" + job.Name})
 		}
 
-		wp.dd.Incr("job.processed", []string{"job:" + job.Name, "jobID:" + job.ID})
+		wp.dd.Incr("job.processed", []string{"job:" + job.Name})
 
 		return err
 	}
