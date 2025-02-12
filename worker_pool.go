@@ -6,9 +6,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/robfig/cron/v3"
+	"github.com/teamwork/datadog/v2"
 )
 
 // WorkerPool represents a pool of workers. It forms the primary API of gocraft/work. WorkerPools provide the public API of gocraft/work. You can attach jobs and middlware to them. You can start and stop them. Based on their concurrency setting, they'll spin up N worker goroutines.
@@ -31,6 +33,7 @@ type WorkerPool struct {
 	scheduler        *requeuer
 	deadPoolReaper   *deadPoolReaper
 	periodicEnqueuer *periodicEnqueuer
+	dd               datadog.Client
 }
 
 type jobType struct {
@@ -109,8 +112,9 @@ func NewWorkerPoolWithOptions(ctx interface{}, concurrency uint, namespace strin
 		jobTypes:      make(map[string]*jobType),
 	}
 
+	wp.Middleware(JobMetricsMiddleware)
 	for i := uint(0); i < wp.concurrency; i++ {
-		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, nil, wp.jobTypes, wp.sleepBackoffs)
+		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, wp.middleware, wp.jobTypes, wp.sleepBackoffs)
 		wp.workers = append(wp.workers, w)
 	}
 
@@ -174,6 +178,30 @@ func (wp *WorkerPool) JobWithOptions(name string, jobOpts JobOptions, fn interfa
 	}
 
 	return wp
+}
+
+func JobMetricsMiddleware(wp *WorkerPool) func(*Job, NextMiddlewareFunc) error {
+	return func(job *Job, next NextMiddlewareFunc) error {
+		startTime := time.Now().Unix()
+
+		queueTime := time.Duration(startTime-job.EnqueuedAt) * time.Second
+
+		wp.dd.Histogram("job.queue_time", queueTime, []string{"job:" + job.Name, "jobID:" + job.ID})
+
+		jobStart := time.Now()
+		err := next()
+		executionTime := time.Since(jobStart)
+
+		wp.dd.Histogram("job.execution_time", executionTime, []string{"job:" + job.Name, "jobID:" + job.ID})
+
+		if err != nil {
+			wp.dd.Incr("job.failures", []string{"job:" + job.Name, "jobID:" + job.ID})
+		}
+
+		wp.dd.Incr("job.processed", []string{"job:" + job.Name, "jobID:" + job.ID})
+
+		return err
+	}
 }
 
 // PeriodicallyEnqueue will periodically enqueue jobName according to the cron-based spec.
