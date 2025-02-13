@@ -6,9 +6,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/robfig/cron/v3"
+	"github.com/teamwork/datadog/v2"
 )
 
 // WorkerPool represents a pool of workers. It forms the primary API of gocraft/work. WorkerPools provide the public API of gocraft/work. You can attach jobs and middlware to them. You can start and stop them. Based on their concurrency setting, they'll spin up N worker goroutines.
@@ -31,6 +33,7 @@ type WorkerPool struct {
 	scheduler        *requeuer
 	deadPoolReaper   *deadPoolReaper
 	periodicEnqueuer *periodicEnqueuer
+	dd               datadog.Client
 }
 
 type jobType struct {
@@ -86,13 +89,13 @@ type middlewareHandler struct {
 
 // NewWorkerPool creates a new worker pool. ctx should be a struct literal whose type will be used for middleware and handlers.
 // concurrency specifies how many workers to spin up - each worker can process jobs concurrently.
-func NewWorkerPool(ctx interface{}, concurrency uint, namespace string, pool *redis.Pool) *WorkerPool {
-	return NewWorkerPoolWithOptions(ctx, concurrency, namespace, pool, WorkerPoolOptions{})
+func NewWorkerPool(ctx interface{}, concurrency uint, namespace string, pool *redis.Pool, datadog datadog.Client) *WorkerPool {
+	return NewWorkerPoolWithOptions(ctx, concurrency, namespace, pool, datadog, WorkerPoolOptions{})
 }
 
 // NewWorkerPoolWithOptions creates a new worker pool as per the NewWorkerPool function, but permits you to specify
 // additional options such as sleep backoffs.
-func NewWorkerPoolWithOptions(ctx interface{}, concurrency uint, namespace string, pool *redis.Pool, workerPoolOpts WorkerPoolOptions) *WorkerPool {
+func NewWorkerPoolWithOptions(ctx interface{}, concurrency uint, namespace string, pool *redis.Pool, datadog datadog.Client, workerPoolOpts WorkerPoolOptions) *WorkerPool {
 	if pool == nil {
 		panic("NewWorkerPool needs a non-nil *redis.Pool")
 	}
@@ -107,10 +110,15 @@ func NewWorkerPoolWithOptions(ctx interface{}, concurrency uint, namespace strin
 		sleepBackoffs: workerPoolOpts.SleepBackoffs,
 		contextType:   ctxType,
 		jobTypes:      make(map[string]*jobType),
+		dd:            datadog,
+	}
+
+	if wp.dd != nil {
+		wp.Middleware(wp.JobMetricsMiddleware)
 	}
 
 	for i := uint(0); i < wp.concurrency; i++ {
-		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, nil, wp.jobTypes, wp.sleepBackoffs)
+		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, wp.middleware, wp.jobTypes, wp.sleepBackoffs)
 		wp.workers = append(wp.workers, w)
 	}
 
@@ -174,6 +182,28 @@ func (wp *WorkerPool) JobWithOptions(name string, jobOpts JobOptions, fn interfa
 	}
 
 	return wp
+}
+
+func (wp *WorkerPool) JobMetricsMiddleware(job *Job, next NextMiddlewareFunc) error {
+	startTime := time.Now().Unix()
+
+	queueTime := time.Duration(startTime-job.EnqueuedAt) * time.Second
+
+	wp.dd.Histogram("job.queue_time", queueTime, []string{"job:" + job.Name})
+
+	jobStart := time.Now()
+	err := next()
+	executionTime := time.Since(jobStart)
+
+	wp.dd.Histogram("job.execution_time", executionTime, []string{"job:" + job.Name})
+
+	if err != nil {
+		wp.dd.Incr("job.failures", []string{"job:" + job.Name})
+	}
+
+	wp.dd.Incr("job.processed", []string{"job:" + job.Name})
+
+	return err
 }
 
 // PeriodicallyEnqueue will periodically enqueue jobName according to the cron-based spec.

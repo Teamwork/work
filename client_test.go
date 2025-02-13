@@ -5,23 +5,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
+	"github.com/teamwork/work/v2/mocks"
 )
 
 type TestContext struct{}
 
 func TestClientWorkerPoolHeartbeats(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
 
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(job *Job) error { return nil })
 	wp.Job("bob", func(job *Job) error { return nil })
 	wp.Start()
 
-	wp2 := NewWorkerPool(TestContext{}, 11, ns, pool)
+	wp2 := NewWorkerPool(TestContext{}, 11, ns, pool, mockDD)
 	wp2.Job("foo", func(job *Job) error { return nil })
 	wp2.Job("bar", func(job *Job) error { return nil })
 	wp2.Start()
@@ -64,6 +71,11 @@ func TestClientWorkerPoolHeartbeats(t *testing.T) {
 }
 
 func TestClientWorkerObservations(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -74,7 +86,7 @@ func TestClientWorkerObservations(t *testing.T) {
 	_, err = enqueuer.Enqueue("foo", Q{"a": 3, "b": 4})
 	assert.Nil(t, err)
 
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(job *Job) error {
 		time.Sleep(50 * time.Millisecond)
 		return nil
@@ -133,6 +145,11 @@ func TestClientWorkerObservations(t *testing.T) {
 }
 
 func TestClientQueues(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -144,7 +161,7 @@ func TestClientQueues(t *testing.T) {
 
 	// Start a pool to work on it. It's going to work on the queues
 	// side effect of that is knowing which jobs are avail
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(job *Job) error {
 		return nil
 	})
@@ -232,6 +249,11 @@ func TestClientScheduledJobs(t *testing.T) {
 }
 
 func TestClientRetryJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -245,7 +267,7 @@ func TestClientRetryJobs(t *testing.T) {
 
 	setNowEpochSecondsMock(1425263429)
 
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(job *Job) error {
 		return fmt.Errorf("ohno")
 	})
@@ -271,6 +293,11 @@ func TestClientRetryJobs(t *testing.T) {
 }
 
 func TestClientDeadJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "testwork"
 	cleanKeyspace(ns, pool)
@@ -284,7 +311,7 @@ func TestClientDeadJobs(t *testing.T) {
 
 	setNowEpochSecondsMock(1425263429)
 
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.JobWithOptions("wat", JobOptions{Priority: 1, MaxFails: 1}, func(job *Job) error {
 		return fmt.Errorf("ohno")
 	})
@@ -650,6 +677,11 @@ func TestClientDeleteScheduledUniqueJob(t *testing.T) {
 }
 
 func TestClientDeleteRetryJob(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "testwork"
 	cleanKeyspace(ns, pool)
@@ -663,7 +695,7 @@ func TestClientDeleteRetryJob(t *testing.T) {
 
 	setNowEpochSecondsMock(1425263429)
 
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(job *Job) error {
 		return fmt.Errorf("ohno")
 	})

@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
 	work "github.com/teamwork/work/v2"
+	"github.com/teamwork/work/v2/mocks"
 )
 
 func TestWebUIStartStop(t *testing.T) {
@@ -27,6 +29,11 @@ func TestWebUIStartStop(t *testing.T) {
 type TestContext struct{}
 
 func TestWebUIQueues(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -40,7 +47,7 @@ func TestWebUIQueues(t *testing.T) {
 
 	// Start a pool to work on it. It's going to work on the queues
 	// side effect of that is knowing which jobs are avail
-	wp := work.NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := work.NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(job *work.Job) error {
 		return nil
 	})
@@ -83,17 +90,22 @@ func TestWebUIQueues(t *testing.T) {
 }
 
 func TestWebUIWorkerPools(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
 
-	wp := work.NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := work.NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(job *work.Job) error { return nil })
 	wp.Job("bob", func(job *work.Job) error { return nil })
 	wp.Start()
 	defer wp.Stop()
 
-	wp2 := work.NewWorkerPool(TestContext{}, 11, ns, pool)
+	wp2 := work.NewWorkerPool(TestContext{}, 11, ns, pool, mockDD)
 	wp2.Job("foo", func(job *work.Job) error { return nil })
 	wp2.Job("bar", func(job *work.Job) error { return nil })
 	wp2.Start()
@@ -121,6 +133,11 @@ func TestWebUIWorkerPools(t *testing.T) {
 }
 
 func TestWebUIBusyWorkers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -130,7 +147,7 @@ func TestWebUIBusyWorkers(t *testing.T) {
 	wgroup2 := sync.WaitGroup{}
 	wgroup2.Add(1)
 
-	wp := work.NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := work.NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(job *work.Job) error {
 		wgroup2.Done()
 		wgroup.Wait()
@@ -139,7 +156,7 @@ func TestWebUIBusyWorkers(t *testing.T) {
 	wp.Start()
 	defer wp.Stop()
 
-	wp2 := work.NewWorkerPool(TestContext{}, 11, ns, pool)
+	wp2 := work.NewWorkerPool(TestContext{}, 11, ns, pool, mockDD)
 	wp2.Start()
 	defer wp2.Stop()
 
@@ -183,6 +200,11 @@ func TestWebUIBusyWorkers(t *testing.T) {
 }
 
 func TestWebUIRetryJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -191,7 +213,7 @@ func TestWebUIRetryJobs(t *testing.T) {
 	_, err := enqueuer.Enqueue("wat", nil)
 	assert.Nil(t, err)
 
-	wp := work.NewWorkerPool(TestContext{}, 2, ns, pool)
+	wp := work.NewWorkerPool(TestContext{}, 2, ns, pool, mockDD)
 	wp.Job("wat", func(job *work.Job) error {
 		return fmt.Errorf("ohno")
 	})
@@ -259,6 +281,11 @@ func TestWebUIScheduledJobs(t *testing.T) {
 }
 
 func TestWebUIDeadJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "testwork"
 	cleanKeyspace(ns, pool)
@@ -268,7 +295,7 @@ func TestWebUIDeadJobs(t *testing.T) {
 	_, err = enqueuer.Enqueue("wat", nil)
 	assert.Nil(t, err)
 
-	wp := work.NewWorkerPool(TestContext{}, 2, ns, pool)
+	wp := work.NewWorkerPool(TestContext{}, 2, ns, pool, mockDD)
 	wp.JobWithOptions("wat", work.JobOptions{Priority: 1, MaxFails: 1}, func(job *work.Job) error {
 		return fmt.Errorf("ohno")
 	})
@@ -347,6 +374,11 @@ func TestWebUIDeadJobs(t *testing.T) {
 }
 
 func TestWebUIDeadJobsDeleteRetryAll(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "testwork"
 	cleanKeyspace(ns, pool)
@@ -356,7 +388,7 @@ func TestWebUIDeadJobsDeleteRetryAll(t *testing.T) {
 	_, err = enqueuer.Enqueue("wat", nil)
 	assert.Nil(t, err)
 
-	wp := work.NewWorkerPool(TestContext{}, 2, ns, pool)
+	wp := work.NewWorkerPool(TestContext{}, 2, ns, pool, mockDD)
 	wp.JobWithOptions("wat", work.JobOptions{Priority: 1, MaxFails: 1}, func(job *work.Job) error {
 		return fmt.Errorf("ohno")
 	})

@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/teamwork/work/v2/mocks"
 )
 
 func TestEnqueue(t *testing.T) {
@@ -99,6 +101,11 @@ func TestEnqueueIn(t *testing.T) {
 }
 
 func TestEnqueueUnique(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -138,7 +145,7 @@ func TestEnqueueUnique(t *testing.T) {
 
 	// Process the queues. Ensure the right number of jobs were processed
 	var wats, taws int64
-	wp := NewWorkerPool(TestContext{}, 3, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 3, ns, pool, mockDD)
 	wp.JobWithOptions("wat", JobOptions{Priority: 1, MaxFails: 1}, func(job *Job) error {
 		mutex.Lock()
 		wats++
@@ -235,6 +242,11 @@ func TestEnqueueUniqueByKey(t *testing.T) {
 	var arg3 string
 	var arg4 string
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -266,7 +278,7 @@ func TestEnqueueUniqueByKey(t *testing.T) {
 
 	// Process the queues. Ensure the right number of jobs were processed
 	var wats, taws int64
-	wp := NewWorkerPool(TestContext{}, 3, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 3, ns, pool, mockDD)
 	wp.JobWithOptions("wat", JobOptions{Priority: 1, MaxFails: 1}, func(job *Job) error {
 		mutex.Lock()
 		argA := job.Args["a"].(float64)

@@ -4,8 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
+	"github.com/teamwork/work/v2/mocks"
 )
 
 func TestDeadPoolReaper(t *testing.T) {
@@ -255,6 +257,11 @@ func TestDeadPoolReaperNoJobTypes(t *testing.T) {
 }
 
 func TestDeadPoolReaperWithWorkerPools(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	job1 := "job1"
@@ -279,7 +286,7 @@ func TestDeadPoolReaperWithWorkerPools(t *testing.T) {
 	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job1)))
 
 	// setup a worker pool and start the reaper, which should restart the stale job above
-	wp := setupTestWorkerPool(pool, ns, job1, 1, JobOptions{Priority: 1})
+	wp := setupTestWorkerPool(pool, mockDD, ns, job1, 1, JobOptions{Priority: 1})
 	wp.deadPoolReaper = newDeadPoolReaper(wp.namespace, wp.pool, []string{"job1"})
 	wp.deadPoolReaper.deadTime = expectedDeadTime
 	wp.deadPoolReaper.start()

@@ -50,7 +50,7 @@ func main() {
 		}
 	}()
 
-	wp := work.NewWorkerPool(context{}, 5, *redisNamespace, pool)
+	wp := work.NewWorkerPool(context{}, 5, *redisNamespace, pool, nil)
 	wp.Job("foobar", epsilonHandler)
 	wp.Start()
 
