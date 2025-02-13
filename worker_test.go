@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
+	"github.com/teamwork/work/v2/mocks"
 )
 
 func TestWorkerBasics(t *testing.T) {
@@ -366,6 +368,11 @@ func TestWorkersPaused(t *testing.T) {
 // Test that in the case of an unavailable Redis server,
 // the worker loop exits in the case of a WorkerPool.Stop
 func TestStop(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	redisPool := &redis.Pool{
 		Dial: func() (redis.Conn, error) {
 			c, err := redis.Dial("tcp", "notworking:6379", redis.DialConnectTimeout(1*time.Second))
@@ -375,12 +382,17 @@ func TestStop(t *testing.T) {
 			return c, nil
 		},
 	}
-	wp := NewWorkerPool(TestContext{}, 10, "work", redisPool)
+	wp := NewWorkerPool(TestContext{}, 10, "work", redisPool, mockDD)
 	wp.Start()
 	wp.Stop()
 }
 
 func BenchmarkJobProcessing(b *testing.B) {
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	cleanKeyspace(ns, pool)
@@ -393,7 +405,7 @@ func BenchmarkJobProcessing(b *testing.B) {
 		}
 	}
 
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Job("wat", func(c *TestContext, job *Job) error {
 		return nil
 	})
@@ -597,12 +609,17 @@ type emptyCtx struct{}
 // drained before returning.
 // https://github.com/gocraft/work/issues/24
 func TestWorkerPoolStop(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	ns := "will_it_end"
 	pool := newTestPool(":6379")
 	var started, stopped int32
 	num_iters := 30
 
-	wp := NewWorkerPool(emptyCtx{}, 2, ns, pool)
+	wp := NewWorkerPool(emptyCtx{}, 2, ns, pool, mockDD)
 
 	wp.Job("sample_job", func(c *emptyCtx, job *Job) error {
 		atomic.AddInt32(&started, 1)

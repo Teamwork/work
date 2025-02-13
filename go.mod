@@ -25,10 +25,13 @@ require (
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4 // indirect
 )
 
-require github.com/teamwork/datadog/v2 v2.0.1
+require (
+	github.com/DataDog/datadog-go/v5 v5.3.0
+	github.com/golang/mock v1.6.0
+	github.com/teamwork/datadog/v2 v2.0.1
+)
 
 require (
-	github.com/DataDog/datadog-go/v5 v5.3.0 // indirect
 	github.com/Microsoft/go-winio v0.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

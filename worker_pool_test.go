@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
+	"github.com/teamwork/work/v2/mocks"
 )
 
 type tstCtx struct {
@@ -73,9 +75,14 @@ func TestWorkerPoolMiddlewareValidations(t *testing.T) {
 }
 
 func TestWorkerPoolStartStop(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 	wp.Start()
 	wp.Start()
 	wp.Stop()
@@ -85,9 +92,14 @@ func TestWorkerPoolStartStop(t *testing.T) {
 }
 
 func TestWorkerPoolValidations(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
-	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool, mockDD)
 
 	func() {
 		defer func() {
@@ -115,11 +127,16 @@ func TestWorkerPoolValidations(t *testing.T) {
 }
 
 func TestWorkersPoolRunSingleThreaded(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns := "work"
 	job1 := "job1"
 	numJobs, concurrency, sleepTime := 5, 5, 2
-	wp := setupTestWorkerPool(pool, ns, job1, concurrency, JobOptions{Priority: 1, MaxConcurrency: 1})
+	wp := setupTestWorkerPool(pool, mockDD, ns, job1, concurrency, JobOptions{Priority: 1, MaxConcurrency: 1})
 	wp.Start()
 	// enqueue some jobs
 	enqueuer := NewEnqueuer(ns, pool)
@@ -158,10 +175,15 @@ func TestWorkersPoolRunSingleThreaded(t *testing.T) {
 }
 
 func TestWorkerPoolPauseSingleThreadedJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDD := mocks.NewMockClient(ctrl)
+
 	pool := newTestPool(":6379")
 	ns, job1 := "work", "job1"
 	numJobs, concurrency, sleepTime := 5, 5, 2
-	wp := setupTestWorkerPool(pool, ns, job1, concurrency, JobOptions{Priority: 1, MaxConcurrency: 1})
+	wp := setupTestWorkerPool(pool, mockDD, ns, job1, concurrency, JobOptions{Priority: 1, MaxConcurrency: 1})
 	wp.Start()
 	// enqueue some jobs
 	enqueuer := NewEnqueuer(ns, pool)
@@ -213,12 +235,12 @@ func (t *TestContext) SleepyJob(job *Job) error {
 	return nil
 }
 
-func setupTestWorkerPool(pool *redis.Pool, namespace, jobName string, concurrency int, jobOpts JobOptions) *WorkerPool {
+func setupTestWorkerPool(pool *redis.Pool, mockDD *mocks.MockClient, namespace, jobName string, concurrency int, jobOpts JobOptions) *WorkerPool {
 	deleteQueue(pool, namespace, jobName)
 	deleteRetryAndDead(pool, namespace)
 	deletePausedAndLockedKeys(namespace, jobName, pool)
 
-	wp := NewWorkerPool(TestContext{}, uint(concurrency), namespace, pool)
+	wp := NewWorkerPool(TestContext{}, uint(concurrency), namespace, pool, mockDD)
 	wp.JobWithOptions(jobName, jobOpts, (*TestContext).SleepyJob)
 	// reset the backoff times to help with testing
 	sleepBackoffsInMilliseconds = []int64{10, 10, 10, 10, 10}
