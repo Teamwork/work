@@ -113,7 +113,10 @@ func NewWorkerPoolWithOptions(ctx interface{}, concurrency uint, namespace strin
 		dd:            datadog,
 	}
 
-	wp.Middleware(wp.JobMetricsMiddleware)
+	if wp.dd != nil {
+		wp.Middleware(wp.JobMetricsMiddleware)
+	}
+
 	for i := uint(0); i < wp.concurrency; i++ {
 		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, wp.middleware, wp.jobTypes, wp.sleepBackoffs)
 		wp.workers = append(wp.workers, w)
